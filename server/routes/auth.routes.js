@@ -1,5 +1,6 @@
 const router = require("express").Router();
-
+const jwt = require("jsonwebtoken");
+require("dotenv");
 // ℹ️ Handles password encryption
 const bcrypt = require("bcrypt");
 const mongoose = require("mongoose");
@@ -11,20 +12,31 @@ const saltRounds = 10;
 const User = require("../models/User.model");
 
 // Require necessary (isLoggedOut and isLiggedIn) middleware in order to control access to specific routes
-const isLoggedOut = require("../middleware/isLoggedOut");
-const isLoggedIn = require("../middleware/isLoggedIn");
+const {isAuthenticated} = require("../middleware/jwt.middleware");
 
-router.get("/loggedin", (req, res) => {
-  res.json(req.user);
+router.get("/", (req, res) => {
+  res.json("auth");
 });
 
-router.post("/signup", isLoggedOut, (req, res) => {
-  const { username, password } = req.body;
+router.get("/loggedin", isAuthenticated, (req,res)=>{
+  res.json(req.user)
+})
+
+router.post("/signup",  (req, res) => {
+  const { username, password, email, name } = req.body;
 
   if (!username) {
     return res
       .status(400)
       .json({ errorMessage: "Please provide your username." });
+  }
+  if (!email) {
+    return res
+      .status(400)
+      .json({ errorMessage: "Please provide your e-mail." });
+  }
+  if (!name) {
+    return res.status(400).json({ errorMessage: "Please provide your name." });
   }
 
   if (password.length < 8) {
@@ -60,6 +72,8 @@ router.post("/signup", isLoggedOut, (req, res) => {
         // Create a user and save it in the database
         return User.create({
           username,
+          name,
+          email,
           password: hashedPassword,
         });
       })
@@ -83,7 +97,7 @@ router.post("/signup", isLoggedOut, (req, res) => {
   });
 });
 
-router.post("/login", isLoggedOut, (req, res, next) => {
+router.post("/login",  (req, res, next) => {
   const { username, password } = req.body;
 
   if (!username) {
@@ -113,9 +127,15 @@ router.post("/login", isLoggedOut, (req, res, next) => {
         if (!isSamePassword) {
           return res.status(400).json({ errorMessage: "Wrong credentials." });
         }
-        req.session.user = user;
-        // req.session.user = user._id; // ! better and safer but in this case we saving the entire user object
-        return res.json(user);
+
+        const payload = {_id: user._id, username: user.username}
+
+        const authToken = jwt.sign(payload, process.env.TOKEN_SECRET, {
+          algorithm: "HS256",
+          expiresIn: "6h",
+        });
+        res.status(200).json({authToken})
+      
       });
     })
 
@@ -127,7 +147,7 @@ router.post("/login", isLoggedOut, (req, res, next) => {
     });
 });
 
-router.get("/logout", isLoggedIn, (req, res) => {
+router.get("/logout", isAuthenticated, (req, res) => {
   req.session.destroy((err) => {
     if (err) {
       return res.status(500).json({ errorMessage: err.message });
