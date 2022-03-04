@@ -12,17 +12,17 @@ const saltRounds = 10;
 const User = require("../models/User.model");
 
 // Require necessary (isLoggedOut and isLiggedIn) middleware in order to control access to specific routes
-const {isAuthenticated} = require("../middleware/jwt.middleware");
+const { isAuthenticated } = require("../middleware/jwt.middleware");
 
 router.get("/", (req, res) => {
   res.json("auth");
 });
 
-router.get("/loggedin", isAuthenticated, (req,res)=>{
-  res.json(req.user)
-})
+router.get("/loggedin", isAuthenticated, (req, res) => {
+  res.json(req.user);
+});
 
-router.post("/signup",  (req, res) => {
+router.post("/signup", (req, res) => {
   const { username, password, email, name } = req.body;
 
   if (!username) {
@@ -97,7 +97,7 @@ router.post("/signup",  (req, res) => {
   });
 });
 
-router.post("/login",  (req, res, next) => {
+router.post("/login", (req, res, next) => {
   const { username, password } = req.body;
 
   if (!username) {
@@ -128,14 +128,13 @@ router.post("/login",  (req, res, next) => {
           return res.status(400).json({ errorMessage: "Wrong credentials." });
         }
 
-        const payload = {_id: user._id, username: user.username}
+        const payload = { _id: user._id, username: user.username };
 
         const authToken = jwt.sign(payload, process.env.TOKEN_SECRET, {
           algorithm: "HS256",
           expiresIn: "6h",
         });
-        res.status(200).json({authToken})
-      
+        res.status(200).json({ authToken });
       });
     })
 
@@ -147,13 +146,65 @@ router.post("/login",  (req, res, next) => {
     });
 });
 
-router.get("/logout", isAuthenticated, (req, res) => {
-  req.session.destroy((err) => {
-    if (err) {
-      return res.status(500).json({ errorMessage: err.message });
+router.get("/:userId/edit", (req, res) => {
+  User.findById(req.params.userId)
+    .then((profile) => {
+      res.json(profile);
+    })
+    .catch((err) => {
+      res.json(err.message);
+    });
+});
+
+router.post("/:userId/edit", (req, res) => {
+  User.findOne({ username:req.body.username }).then((found) => {
+    if (found) {
+      return res.status(400).json({ errorMessage: "Username already taken." });
     }
-    res.json({ message: "Done" });
+
+    return bcrypt
+      .genSalt(saltRounds)
+      .then((salt) => bcrypt.hash(req.body.password, salt))
+      .then((hashedPassword) => {
+        // Create a user and save it in the database
+        return User.findByIdAndUpdate(
+          req.params.userId,
+          {
+            username: req.body.username,
+            password: hashedPassword,
+          },
+    
+          { new: true }
+        )
+      })
+      .then((updatedProfile) => {
+        if (req.body.password.length < 8) {
+          return res.status(400).json({
+            errorMessage:
+              "Your password needs to be at least 8 characters long.",
+          });
+        }
+        res.json(updatedProfile);
+      })
+
+      .catch((err) => {
+        res.json(err.message);
+      });
   });
+});
+
+router.post("/:userId/remove", (req, res) => {
+  User.findByIdAndRemove(req.params.userId)
+    .then((deletedProfile) => {
+      res.json(deletedProfile);
+    })
+    .catch((err) => {
+      res.json(err.message);
+    });
+});
+
+router.get("/logout", isAuthenticated, (req, res) => {
+  res.json({ message: "Done" });
 });
 
 module.exports = router;

@@ -28,7 +28,7 @@ router.get("/view-posts", (req, res) => {
       res.json(err.message);
     });
 });
-router.get("/:postId/edit", (req, res) => {
+router.get("/:postId/view-post", (req, res) => {
   Post.findById(req.params.postId)
     .then((onePost) => {
       res.json(onePost);
